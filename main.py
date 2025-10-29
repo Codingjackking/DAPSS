@@ -1,37 +1,34 @@
+import sys
 import threading
 import time
-
-from common.message import Message
 from overlay.node import Node
-from publisher.publisher import Publisher
 from subscriber.subscriber import Subscriber
+
+def start_node(node: Node):
+    try:
+        node.start_server()
+    except Exception as e:
+        print(f"[FATAL] Node crashed: {e}")
 
 
 if __name__ == "__main__":
-    # Build a small ring: 2 nodes gossiping to each other
-    node1 = Node("127.0.0.1", 5001, [("127.0.0.1", 5002)])
-    node2 = Node("127.0.0.1", 5002, [("127.0.0.1", 5001)])
+    if len(sys.argv) < 2:
+        print("Usage: python main.py <port> [peer1_port peer2_port ...]")
+        sys.exit(1)
 
-    # Start servers
-    threading.Thread(target=node1.start_server, daemon=True).start()
-    threading.Thread(target=node2.start_server, daemon=True).start()
+    host = "127.0.0.1"
+    port = int(sys.argv[1])
+    peers = [(host, int(p)) for p in sys.argv[2:]] if len(sys.argv) > 2 else []
+    print(f"[BOOT] Starting node at {host}:{port} with peers: {peers}")
 
-    # Attach subscribers and subscribe to a topic
-    sub1 = Subscriber(node1, "Alice")
-    sub2 = Subscriber(node2, "Bob")
-    sub1.subscribe("news")
-    sub2.subscribe("news")
+    node = Node(host, port, peers)
+    threading.Thread(target=start_node, args=(node,), daemon=True).start()
+    sub = Subscriber(node, name=f"Subscriber@{port}")
+    sub.subscribe("news")
 
-    # Give servers a moment to start
-    time.sleep(1.0)
-
-    # Publish two ways: via Message and via (topic, content)
-    pub = Publisher(node1)
-    msg = Message("news", "Distributed systems are powerful!", "Node1")
-    pub.publish(msg)
-
-    time.sleep(0.5)
-    pub.publish("news", "Gossip works across peers")
-
-    # Keep the process alive briefly to see gossip propagation
-    time.sleep(2.0)
+    print(f"[READY] Node running at {host}:{port}. Press Ctrl+C to stop.")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print(f"[SHUTDOWN] Node {port} stopped.")
