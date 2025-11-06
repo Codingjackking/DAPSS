@@ -3,12 +3,12 @@ import socket
 import struct
 import threading
 from feature.message import Message
-from overlay.discovery import registry_discover_nodes as discover_nodes
+from overlay.discovery import registry_discover_nodes, discover_nodes as udp_discover
 
 
 def send_message(host: str, port: int, msg_json: str):
     payload = msg_json.encode("utf-8")
-    header = struct.pack("!I", len(payload))
+    header = struct.pack("!I", len(payload))  # 4-byte big-endian header
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(2.5)
@@ -26,10 +26,16 @@ if __name__ == "__main__":
 
     topic, content = sys.argv[1], sys.argv[2]
 
-    # Use discovery to find live nodes dynamically
-    active_nodes = discover_nodes(timeout=2.0)
+    # 1) Prefer registry (topic-aware)
+    active_nodes = registry_discover_nodes(topic_filter=[topic], timeout=2.0)
+
+    # 2) Fallback to UDP discovery if registry empty
     if not active_nodes:
-        print("[WARN] No active nodes detected! Exiting.")
+        print("[INFO] Registry empty; falling back to UDP discovery...")
+        active_nodes = udp_discover(timeout=2.0, topic_filter=[topic])
+
+    if not active_nodes:
+        print("[WARN] No active nodes detected for topic '{topic}'. Exiting.")
         sys.exit(0)
 
     print(f"[INFO] Found {len(active_nodes)} active node(s): {active_nodes}")
@@ -41,4 +47,4 @@ if __name__ == "__main__":
     for t in threads:
         t.join()
 
-    print(f"[DONE] Broadcasted '{topic}' to {len(active_nodes)} detected node(s).")
+    print(f"[DONE] Broadcasted '{topic}' to {len(active_nodes)} matched node(s).")

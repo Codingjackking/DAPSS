@@ -2,6 +2,8 @@
 import json
 import socket
 import struct
+import threading
+
 from datetime import datetime
 from typing import Optional, List, Tuple
 
@@ -59,7 +61,6 @@ class Message:
     @staticmethod
     def broadcast(msg_json: str, nodes: List[Tuple[str, int]], timeout: float = 2.5) -> None:
         """Send a JSON message concurrently to multiple nodes."""
-        import threading
         threads = []
         for host, port in nodes:
             t = threading.Thread(target=Message.send_json, args=(host, port, msg_json, timeout))
