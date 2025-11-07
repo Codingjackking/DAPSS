@@ -73,6 +73,11 @@ class GossipProtocol:
             if "control" in payload:
                 self._handle_control_message(payload)
                 return
+
+            # Update Lamport clock when receiving a message
+            lamport_ts = payload.get("lamport_timestamp", 0)
+            self.node.lamport_clock.update(lamport_ts)
+
             topic = payload.get("topic")
             content = payload.get("content")
             self.node.deliver_message(topic, content)

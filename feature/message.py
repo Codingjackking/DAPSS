@@ -10,13 +10,14 @@ from typing import Optional, List, Tuple
 
 class Message:
     """Immutable message DTO with JSON (de)serialization and network send helper."""
-    __slots__ = ("topic", "content", "sender", "timestamp")
+    __slots__ = ("topic", "content", "sender", "timestamp", "lamport_timestamp")
 
-    def __init__(self, topic: str, content: str, sender: str, timestamp: Optional[str] = None):
+    def __init__(self, topic: str, content: str, sender: str, timestamp: Optional[str] = None, lamport_timestamp: Optional[int] = None):
         self.topic = topic
         self.content = content
         self.sender = sender
         self.timestamp = timestamp or datetime.now().isoformat()
+        self.lamport_timestamp = lamport_timestamp if lamport_timestamp is not None else 0
 
     # ------------------------
     # Serialization
@@ -26,7 +27,8 @@ class Message:
             "topic": self.topic,
             "content": self.content,
             "sender": self.sender,
-            "timestamp": self.timestamp
+            "timestamp": self.timestamp,
+            "lamport_timestamp": self.lamport_timestamp
         }, ensure_ascii=False)
 
     @staticmethod
@@ -36,7 +38,8 @@ class Message:
             topic=obj["topic"],
             content=obj["content"],
             sender=obj["sender"],
-            timestamp=obj.get("timestamp")
+            timestamp=obj.get("timestamp"),
+            lamport_timestamp=obj.get("lamport_timestamp", 0)
         )
 
     # ------------------------

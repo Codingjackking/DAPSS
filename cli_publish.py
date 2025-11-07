@@ -40,7 +40,9 @@ if __name__ == "__main__":
 
     print(f"[INFO] Found {len(active_nodes)} active node(s): {active_nodes}")
 
-    msg = Message(topic, content, sender="CLI_Publisher").to_json()
+    # Lamport timestamp is 0 since it's external to the cluster
+    # The receiving nodes will update their clocks appropriately
+    msg = Message(topic, content, sender="CLI_Publisher", lamport_timestamp=0).to_json()
     threads = [threading.Thread(target=send_message, args=(h, p, msg)) for h, p in active_nodes]
     for t in threads:
         t.start()

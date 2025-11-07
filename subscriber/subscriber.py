@@ -40,7 +40,8 @@ class Subscriber:
     def receive_message(self, topic: str, content: str) -> None:
         """Deliver a message to the subscriber."""
         if topic in self.subscriptions:
-            print(f"[{self.name}] Received '{topic}': {content}")
+            current_clock = self.node.lamport_clock.get_time()
+            print(f"[{self.name}] Received '{topic}': {content} [Lamport:{current_clock}]")
         else:
             # You could choose to silently ignore or log filtered messages
             print(f"[INFO] Ignored message for unsubscribed topic '{topic}'")

@@ -11,6 +11,7 @@ from typing import List, Tuple, Optional
 from overlay.gossip import GossipProtocol
 from overlay.discovery import PeerDiscovery, register_node, unregister_node
 from feature.message import Message
+from feature.timestamp import LamportClock
 
 MAX_FRAME_BYTES = 10 * 1024 * 1024  # 10 MB cap
 
@@ -50,6 +51,9 @@ class Node:
         self.port = port
         self.peers: List[Tuple[str, int]] = peers[:] if peers else []
         self.subscriber = None
+
+        # --- Lamport Clock ---
+        self.lamport_clock = LamportClock()
 
         # --- Gossip & Discovery ---
         self.gossip = GossipProtocol(self)
