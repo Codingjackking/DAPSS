@@ -61,12 +61,7 @@ class GossipProtocol:
                 return
             self.seen.add(msg_id)
 
-        # persist
-        with self._store_lock:
-            self.msg_store[msg_id] = message_json
-            self._append_log(message_json)
-
-        # local delivery
+        # local delivery and timestamp fix
         start = time.time()
         try:
             payload = json.loads(message_json)
@@ -74,9 +69,25 @@ class GossipProtocol:
                 self._handle_control_message(payload)
                 return
 
-            # Update Lamport clock when receiving a message
+            # Gateway Model: Handle external messages (lamport_timestamp=0)
             lamport_ts = payload.get("lamport_timestamp", 0)
-            self.node.lamport_clock.update(lamport_ts)
+
+            if lamport_ts == 0:
+                # This is an external message (from CLI) - we're the gateway
+                # Assign a proper timestamp from this node's clock
+                new_ts = self.node.lamport_clock.tick()
+                payload["lamport_timestamp"] = new_ts
+                # Re-serialize with new timestamp for gossip forwarding
+                message_json = json.dumps(payload)
+                print(f"[GATEWAY] Assigned Lamport timestamp {new_ts} to external message")
+            else:
+                # Normal cluster message - update clock
+                self.node.lamport_clock.update(lamport_ts)
+
+            # persist AFTER timestamp fix (so we store the corrected message)
+            with self._store_lock:
+                self.msg_store[msg_id] = message_json
+                self._append_log(message_json)
 
             topic = payload.get("topic")
             content = payload.get("content")

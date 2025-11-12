@@ -1,7 +1,6 @@
 import sys
 import socket
 import struct
-import threading
 from feature.message import Message
 from overlay.discovery import registry_discover_nodes, discover_nodes as udp_discover
 
@@ -40,13 +39,13 @@ if __name__ == "__main__":
 
     print(f"[INFO] Found {len(active_nodes)} active node(s): {active_nodes}")
 
-    # Lamport timestamp is 0 since it's external to the cluster
-    # The receiving nodes will update their clocks appropriately
-    msg = Message(topic, content, sender="CLI_Publisher", lamport_timestamp=0).to_json()
-    threads = [threading.Thread(target=send_message, args=(h, p, msg)) for h, p in active_nodes]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    # Gateway Model: Send to ONE node instead of all (prevents duplicate timestamps)
+    # The gateway node will assign a proper Lamport timestamp and gossip to the cluster
+    gateway_node = active_nodes[0]  # Pick first node as gateway
 
-    print(f"[DONE] Broadcasted '{topic}' to {len(active_nodes)} matched node(s).")
+    msg = Message(topic, content, sender="CLI_Publisher", lamport_timestamp=0).to_json()
+
+    print(f"[INFO] Using gateway node: {gateway_node[0]}:{gateway_node[1]}")
+    send_message(gateway_node[0], gateway_node[1], msg)
+
+    print(f"[DONE] Sent '{topic}' to gateway node {gateway_node[0]}:{gateway_node[1]}")

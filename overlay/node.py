@@ -12,6 +12,7 @@ from overlay.gossip import GossipProtocol
 from overlay.discovery import PeerDiscovery, register_node, unregister_node
 from feature.message import Message
 from feature.timestamp import LamportClock
+from feature.agreement import ConsensusNode
 
 MAX_FRAME_BYTES = 10 * 1024 * 1024  # 10 MB cap
 
@@ -55,6 +56,9 @@ class Node:
         # --- Lamport Clock ---
         self.lamport_clock = LamportClock()
 
+        # --- Agreement Protocol (Raft-inspired Consensus) ---
+        self.consensus = ConsensusNode(self)
+
         # --- Gossip & Discovery ---
         self.gossip = GossipProtocol(self)
         self.discovery = PeerDiscovery(self)
@@ -90,6 +94,7 @@ class Node:
         server.listen(32)
 
         print(f"[LISTENING] Node running on {self.host}:{self.port}")
+        self.consensus.start()  # Start agreement protocol
         self.gossip.start()
         self.discovery.start()
 
@@ -149,11 +154,25 @@ class Node:
 
     # ------------------------------------------------------------------
     def _process_payload(self, payload: bytes):
-        """Decode and handle a gossip payload."""
+        """Decode and handle a gossip or consensus payload."""
         try:
             data_str = payload.decode("utf-8")
-            self.gossip.gossip_message(data_str)
-        except UnicodeDecodeError:
+            data = json.loads(data_str)
+
+            # Check if this is a consensus message
+            if "type" in data and data["type"] in [
+                "VOTE_REQUEST", "VOTE_RESPONSE", "HEARTBEAT",
+                "APPEND_STATE", "ACK", "COMMIT",
+                "STATE_CHANGE_REQUEST", "REJOIN_REQUEST", "STATE_SYNC"
+            ]:
+                # Route to consensus protocol
+                self.consensus.handle_consensus_message(data)
+            else:
+                # Route to gossip protocol
+                self.gossip.gossip_message(data_str)
+
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            # Binary message or malformed JSON - treat as gossip
             encoded = base64.b64encode(payload).decode("ascii")
             msg = Message(topic="binary", content=encoded, sender=f"{self.host}:{self.port}")
             self.gossip.gossip_message(msg.to_json())
