@@ -1,6 +1,5 @@
 import sys
 import threading
-import time
 from overlay.node import Node
 from subscriber.subscriber import Subscriber
 
@@ -51,9 +50,56 @@ if __name__ == "__main__":
     print("Subscribed to topics:", ", ".join(sub.subscriptions))
     print("Press Ctrl+C to stop.\n")
 
-    # --- Keep node alive ---
+    # --- Interactive command loop for dynamic subscription management ---
+    print("\n=== Interactive Subscription Management ===")
+    print("Commands:")
+    print("  subscribe <topic>   - Subscribe to a new topic")
+    print("  unsubscribe <topic> - Unsubscribe from a topic")
+    print("  list                - Show current subscriptions")
+    print("  quit                - Stop the node\n")
+
     try:
         while True:
-            time.sleep(1)
+            try:
+                cmd = input("> ").strip()
+
+                if not cmd:
+                    continue
+
+                if cmd.startswith("subscribe "):
+                    topic = cmd.split(" ", 1)[1].strip()
+                    if topic:
+                        sub.subscribe(topic)
+                    else:
+                        print("[ERROR] Usage: subscribe <topic>")
+
+                elif cmd.startswith("unsubscribe "):
+                    topic = cmd.split(" ", 1)[1].strip()
+                    if topic:
+                        sub.unsubscribe(topic)
+                    else:
+                        print("[ERROR] Usage: unsubscribe <topic>")
+
+                elif cmd == "list":
+                    if sub.subscriptions:
+                        print(f"Current subscriptions: {', '.join(sorted(sub.subscriptions))}")
+                    else:
+                        print("No active subscriptions")
+
+                elif cmd == "quit":
+                    print(f"\n[SHUTDOWN] Node {port} stopping...")
+                    break
+
+                else:
+                    print(f"[ERROR] Unknown command: '{cmd}'")
+                    print("Type 'subscribe <topic>', 'unsubscribe <topic>', 'list', or 'quit'")
+
+            except EOFError:
+                # Handle Ctrl+D
+                print(f"\n[SHUTDOWN] Node {port} stopping...")
+                break
+            except Exception as e:
+                print(f"[ERROR] Command failed: {e}")
+
     except KeyboardInterrupt:
         print(f"\n[SHUTDOWN] Node {port} stopped.")

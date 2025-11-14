@@ -271,7 +271,7 @@ class ConsensusNode:
         self.state = self.LEADER
         self.leader_id = self.node_id
 
-        print(f"[CONSENSUS]  Became LEADER (term={self.current_term})")
+        print(f"[CONSENSUS] Became LEADER (term={self.current_term})")
 
         # Update cluster state with new leader
         entry = self.state_manager.create_entry("update_leader", leader_id=self.node_id)
@@ -374,11 +374,19 @@ class ConsensusNode:
                 "requester": self.node_id
             }
 
-            # Send to leader (implementation depends on how you want to handle this)
-            # For now, just log that we'd send it
-            print(f"[CONSENSUS] Forwarding state change request to leader {self.leader_id}")
-            # TODO: Actually send to leader
-            return False  # Not implemented yet
+            # Send to leader
+            leader_peer = self._find_peer_by_id(self.leader_id)
+            if leader_peer:
+                threading.Thread(
+                    target=self._send_consensus_message,
+                    args=(leader_peer, json.dumps(request)),
+                    daemon=True
+                ).start()
+                print(f"[CONSENSUS] Forwarded state change request to leader {self.leader_id}")
+                return True
+            else:
+                print(f"[CONSENSUS] Could not reach leader {self.leader_id}")
+                return False
 
     def _append_entry(self, entry: Dict[str, Any]) -> bool:
         """
@@ -444,7 +452,7 @@ class ConsensusNode:
         # Apply to state
         self.state_manager.apply_entry(entry)
 
-        print(f"[LEADER]  COMMITTED L:{lamport_ts} action={entry['action']}")
+        print(f"[LEADER] COMMITTED L:{lamport_ts} action={entry['action']}")
 
         # Broadcast COMMIT to all followers
         commit_msg = {
@@ -592,9 +600,16 @@ class ConsensusNode:
             "node_id": self.node_id
         }
 
-        # TODO: Send ACK to leader
-        # For now, just log
         print(f"[FOLLOWER] Sending ACK for L:{lamport_ts}")
+
+        # Send ACK back to leader
+        leader_peer = self._find_peer_by_id(self.leader_id)
+        if leader_peer:
+            threading.Thread(
+                target=self._send_consensus_message,
+                args=(leader_peer, json.dumps(ack)),
+                daemon=True
+            ).start()
 
     def _handle_ack(self, msg: Dict[str, Any]) -> None:
         """Handle ACK from follower (leader only)"""

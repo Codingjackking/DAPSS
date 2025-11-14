@@ -13,28 +13,74 @@ class Subscriber:
         node.subscriber = self
 
     # ------------------------------------------------------------
-    def subscribe(self, topic: str) -> None:
+    def subscribe(self, topic: str) -> bool:
         """Subscribe to a new topic dynamically."""
         topic = topic.strip()
         if not topic:
-            return
-        if topic not in self.subscriptions:
-            self.subscriptions.add(topic)
-            print(f"[{self.name}] Subscribed to {topic}")
-            self._update_discovery_registry()
-        else:
+            return False
+
+        if topic in self.subscriptions:
             print(f"[{self.name}] Already subscribed to {topic}")
+            return True
+
+        # Phase 1: Startup (consensus not running yet)
+        if not self.node.consensus.running:
+            self.subscriptions.add(topic)
+            print(f"[{self.name}] Subscribed to {topic} (local)")
+            self._update_discovery_registry()
+            return True
+
+        # Phase 2: Dynamic (consensus is running - use agreement protocol)
+        print(f"[{self.name}] Requesting consensus to subscribe to '{topic}'...")
+        entry = self.node.consensus.state_manager.create_entry(
+            action="subscribe",
+            node_id=f"{self.node.host}:{self.node.port}",
+            topic=topic
+        )
+
+        success = self.node.consensus.request_state_change(entry)
+        if success:
+            self.subscriptions.add(topic)
+            print(f"[{self.name}]  Subscribed to {topic} (consensus reached)")
+            self._update_discovery_registry()
+            return True
+        else:
+            print(f"[{self.name}]  Failed to subscribe to {topic} (no consensus)")
+            return False
 
     # ------------------------------------------------------------
-    def unsubscribe(self, topic: str) -> None:
+    def unsubscribe(self, topic: str) -> bool:
         """Unsubscribe from a topic dynamically."""
         topic = topic.strip()
-        if topic in self.subscriptions:
-            self.subscriptions.remove(topic)
-            print(f"[{self.name}] Unsubscribed from {topic}")
-            self._update_discovery_registry()
-        else:
+
+        if topic not in self.subscriptions:
             print(f"[{self.name}] Not currently subscribed to {topic}")
+            return False
+
+        # Phase 1: Startup (consensus not running yet)
+        if not self.node.consensus.running:
+            self.subscriptions.remove(topic)
+            print(f"[{self.name}] Unsubscribed from {topic} (local)")
+            self._update_discovery_registry()
+            return True
+
+        # Phase 2: Dynamic (consensus is running - use agreement protocol)
+        print(f"[{self.name}] Requesting consensus to unsubscribe from '{topic}'...")
+        entry = self.node.consensus.state_manager.create_entry(
+            action="unsubscribe",
+            node_id=f"{self.node.host}:{self.node.port}",
+            topic=topic
+        )
+
+        success = self.node.consensus.request_state_change(entry)
+        if success:
+            self.subscriptions.remove(topic)
+            print(f"[{self.name}] Unsubscribed from {topic} (consensus reached)")
+            self._update_discovery_registry()
+            return True
+        else:
+            print(f"[{self.name}] Failed to unsubscribe from {topic} (no consensus)")
+            return False
 
     # ------------------------------------------------------------
     def receive_message(self, topic: str, content: str) -> None:
