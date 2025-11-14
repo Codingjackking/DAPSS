@@ -102,6 +102,10 @@ class PeerDiscovery:
                     self.node.peers.append(peer)
                     print(f"[DISCOVERY] Added peer {peer} (shared: {peer_topics & my_topics})")
 
+                    # Notify consensus layer that cluster size changed
+                    if hasattr(self.node, 'consensus'):
+                        self.node.consensus.on_peer_discovered(peer)
+
             except Exception as e:
                 print(f"[WARN] Discovery listen error: {e}")
 

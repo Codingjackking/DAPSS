@@ -283,6 +283,29 @@ class ConsensusNode:
             self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
             self._heartbeat_thread.start()
 
+    def on_peer_discovered(self, peer: Tuple[str, int]) -> None:
+        """
+        Called by discovery when a new peer is found.
+        If we're leader but no longer have majority, step down.
+
+        Args:
+            peer: (host, port) tuple of newly discovered peer
+        """
+        if self.state != self.LEADER:
+            return
+
+        # Recalculate cluster size
+        total_nodes = len(self.node.peers) + 1
+
+        # Count how many nodes we had when we became leader
+        # (we had majority which means vote_count >= (old_total // 2) + 1)
+        old_total = self.vote_count * 2  # Rough estimate
+
+        # If cluster significantly grew, we should re-elect
+        if total_nodes > old_total:
+            print(f"[CONSENSUS] Cluster grew ({old_total} → {total_nodes}), stepping down for re-election")
+            self.become_follower(self.current_term)
+
     def _election_timeout_loop(self) -> None:
         """Monitor for leader failure and trigger elections"""
         election_start_time = None
