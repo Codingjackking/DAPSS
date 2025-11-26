@@ -13,6 +13,7 @@ from overlay.discovery import PeerDiscovery, register_node, unregister_node
 from feature.message import Message
 from feature.timestamp import LamportClock
 from feature.agreement import ConsensusNode
+from feature.security import SecureChannel
 
 MAX_FRAME_BYTES = 10 * 1024 * 1024  # 10 MB cap
 
@@ -47,11 +48,26 @@ class Node:
     - Maintains consistency across the cluster
     """
 
-    def __init__(self, host: str, port: int, peers: Optional[List[Tuple[str, int]]] = None):
+    def __init__(self, host: str, port: int, peers: Optional[List[Tuple[str, int]]] = None, config: Optional[dict] = None):
         self.host = host
         self.port = port
         self.peers: List[Tuple[str, int]] = peers[:] if peers else []
         self.subscriber = None
+
+        # --- Load configuration ---
+        self.config = config or self._load_config()
+
+        # --- Security ---
+        self.security_enabled = self.config.get("enable_node_auth", False)
+        if self.security_enabled:
+            cluster_secret = self.config.get("cluster_secret", "default_secret")
+            encryption_key = self.config.get("encryption_key", None)
+            if encryption_key == "put_generated_key_here_or_leave_empty_to_auto_generate":
+                encryption_key = None
+            self.secure_channel = SecureChannel(cluster_secret, encryption_key)
+            # Don't print here - will print in start_server() for visibility
+        else:
+            self.secure_channel = None
 
         # --- Lamport Clock ---
         self.lamport_clock = LamportClock()
@@ -71,6 +87,22 @@ class Node:
 
         # --- Register node in cluster registry ---
         atexit.register(lambda: unregister_node(self.host, self.port))
+
+    def _load_config(self) -> dict:
+        """Load configuration from config.json"""
+        try:
+            with open("config.json", "r") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            print("[WARN] config.json not found, using defaults")
+            return {
+                "enable_node_auth": False,
+                "enable_encryption": False,
+                "enable_message_signing": False
+            }
+        except Exception as e:
+            print(f"[WARN] Error loading config: {e}, using defaults")
+            return {}
 
     # ------------------------------------------------------------------
     def start_server(self):
@@ -94,6 +126,21 @@ class Node:
         server.listen(32)
 
         print(f"[LISTENING] Node running on {self.host}:{self.port}")
+
+        # Display security status
+        if self.security_enabled:
+            features = []
+            if self.config.get("enable_encryption", False):
+                features.append("Encryption (AES)")
+            if self.config.get("enable_message_signing", False):
+                features.append("Message Signing (HMAC)")
+            if self.config.get("enable_node_auth", False):
+                features.append("Node Authentication")
+
+            print(f"[SECURITY] ✓ Enabled: {', '.join(features)}")
+        else:
+            print(f"[SECURITY] ✗ Disabled (insecure mode)")
+
         self.consensus.start()  # Start agreement protocol
         self.gossip.start()
         self.discovery.start()
@@ -159,6 +206,24 @@ class Node:
             data_str = payload.decode("utf-8")
             data = json.loads(data_str)
 
+            # Handle authentication messages
+            if "type" in data and data["type"] == "AUTH_CHALLENGE":
+                self._handle_auth_challenge(data)
+                return
+            elif "type" in data and data["type"] == "AUTH_RESPONSE":
+                self._handle_auth_response(data)
+                return
+
+            # Handle secured messages (encrypted + signed)
+            if "type" in data and data["type"] == "SECURE" and self.security_enabled:
+                decrypted = self.secure_channel.unsecure_message(data_str)
+                if decrypted is None:
+                    print("[SECURITY] ✗ Failed to decrypt/verify message, dropping")
+                    return
+                # Process decrypted message
+                data_str = decrypted
+                data = json.loads(decrypted)
+
             # Check if this is a consensus message
             if "type" in data and data["type"] in [
                 "VOTE_REQUEST", "VOTE_RESPONSE", "HEARTBEAT",
@@ -176,6 +241,115 @@ class Node:
             encoded = base64.b64encode(payload).decode("ascii")
             msg = Message(topic="binary", content=encoded, sender=f"{self.host}:{self.port}")
             self.gossip.gossip_message(msg.to_json())
+
+    # ------------------------------------------------------------------
+    def _handle_auth_challenge(self, data: dict):
+        """Handle authentication challenge from a peer."""
+        if not self.security_enabled:
+            return
+
+        challenge = data.get("challenge")
+        peer_id = data.get("node_id")
+        reply_host = data.get("reply_host")
+        reply_port = data.get("reply_port")
+
+        if not all([challenge, peer_id, reply_host, reply_port]):
+            print("[AUTH] Invalid challenge message")
+            return
+
+        # Generate response
+        my_id = f"{self.host}:{self.port}"
+        response = self.secure_channel.auth.create_auth_response(challenge, my_id)
+
+        # Send response back
+        response_msg = {
+            "type": "AUTH_RESPONSE",
+            "challenge": challenge,
+            "node_id": my_id,
+            "response": response
+        }
+
+        self._send_auth_message((reply_host, reply_port), json.dumps(response_msg))
+
+    def _handle_auth_response(self, data: dict):
+        """Handle authentication response from a peer."""
+        if not self.security_enabled:
+            return
+
+        challenge = data.get("challenge")
+        node_id = data.get("node_id")
+        response = data.get("response")
+
+        if not all([challenge, node_id, response]):
+            print("[AUTH] Invalid response message")
+            return
+
+        # Verify response
+        if self.secure_channel.auth.verify_auth_response(challenge, node_id, response):
+            # Extract peer address from node_id
+            try:
+                host, port_str = node_id.split(":")
+                peer = (host, int(port_str))
+                self.secure_channel.auth.mark_authenticated(peer)
+            except Exception as e:
+                print(f"[AUTH] Error parsing node_id: {e}")
+        else:
+            print(f"[AUTH] ✗ Authentication failed for {node_id}")
+
+    def _send_auth_message(self, peer: Tuple[str, int], msg_json: str):
+        """Send an authentication message to a peer."""
+        try:
+            payload = msg_json.encode("utf-8")
+            header = struct.pack("!I", len(payload))
+
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(2.0)
+                s.connect(peer)
+                s.sendall(header + payload)
+        except Exception as e:
+            print(f"[AUTH] Failed to send auth message to {peer}: {e}")
+
+    def authenticate_peer(self, peer: Tuple[str, int]) -> bool:
+        """
+        Authenticate a peer using challenge-response protocol.
+
+        Args:
+            peer: (host, port) tuple
+
+        Returns:
+            True if authentication successful
+        """
+        if not self.security_enabled:
+            return True  # Authentication disabled, allow all
+
+        # Check if already authenticated
+        if self.secure_channel.auth.is_authenticated(peer):
+            return True
+
+        # Send challenge
+        challenge = self.secure_channel.auth.create_challenge()
+        my_id = f"{self.host}:{self.port}"
+
+        challenge_msg = {
+            "type": "AUTH_CHALLENGE",
+            "challenge": challenge,
+            "node_id": my_id,
+            "reply_host": self.host,
+            "reply_port": self.port
+        }
+
+        try:
+            self._send_auth_message(peer, json.dumps(challenge_msg))
+
+            # Wait briefly for response (handled asynchronously in _handle_auth_response)
+            time.sleep(0.5)
+
+            # Check if peer is now authenticated
+            return self.secure_channel.auth.is_authenticated(peer)
+
+        except Exception as e:
+            print(f"[AUTH] Authentication failed for {peer}: {e}")
+            return False
 
     # ------------------------------------------------------------------
     def deliver_message(self, topic: str, content: str):

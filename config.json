@@ -1,0 +1,7 @@
+{
+  "cluster_secret": "DAPSS_CLUSTER_SECRET",
+  "encryption_key": "rGBzJ0U89kasl0ikd2KDXskjhAI0gvCsEIK8sMpQT3U=",
+  "enable_encryption": true,
+  "enable_message_signing": true,
+  "enable_node_auth": true
+}

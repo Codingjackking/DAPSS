@@ -14,17 +14,23 @@ def start_node(node: Node):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python main.py <port> [peer1_port peer2_port ...]")
+        print("Usage: python main.py <port> [peer1_port peer2_port ...] [--latency-log]")
+        print("\nOptions:")
+        print("  --latency-log    Enable latency logging for benchmarking")
         sys.exit(1)
 
+    # Parse arguments
+    enable_latency_log = "--latency-log" in sys.argv
+    args = [arg for arg in sys.argv[1:] if arg != "--latency-log"]
+
     host = "127.0.0.1"
-    port = int(sys.argv[1])
-    peers = [(host, int(p)) for p in sys.argv[2:]] if len(sys.argv) > 2 else []
+    port = int(args[0])
+    peers = [(host, int(p)) for p in args[1:]] if len(args) > 1 else []
     print(f"[BOOT] Starting node at {host}:{port} with peers: {peers}")
 
     # --- Create Node (but do not start server yet) ---
     node = Node(host, port, peers)
-    sub = Subscriber(node, name=f"Subscriber@{port}")
+    sub = Subscriber(node, name=f"Subscriber@{port}", enable_latency_log=enable_latency_log)
 
     # --- Dynamic subscription setup ---
     print("\n📡 Available topics: news, updates, alerts, changes, weather, sports")

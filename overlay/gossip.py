@@ -53,6 +53,35 @@ class GossipProtocol:
         self.running = False
 
     # ------------------------------------------------------------------
+    def _get_reachable_peers(self) -> List[Tuple[str, int]]:
+        """
+        Filter out unreachable peers based on partition monitor's health cache.
+        Returns only peers that are currently reachable.
+        """
+        if not hasattr(self.node, 'consensus') or not hasattr(self.node.consensus, '_peer_health_cache'):
+            # Consensus not initialized or no health data, return all peers
+            return list(self.node.peers or [])
+
+        all_peers = list(self.node.peers or [])
+        health_cache = self.node.consensus._peer_health_cache
+        current_time = time.time()
+        reachable = []
+
+        for peer in all_peers:
+            if peer in health_cache:
+                cached_time = health_cache[peer]
+                # Positive timestamp = reachable, negative = unreachable
+                # Only include if positive (reachable) and recent (within 10 seconds)
+                if cached_time > 0 and (current_time - cached_time) < 10.0:
+                    reachable.append(peer)
+                # If negative (unreachable), skip this peer entirely
+            elif peer not in health_cache:
+                # Not checked yet, assume reachable (will be checked soon)
+                reachable.append(peer)
+
+        return reachable
+
+    # ------------------------------------------------------------------
     def gossip_message(self, message_json: str) -> None:
         """Deliver and gossip message if unseen."""
         msg_id = self._extract_message_id(message_json)
@@ -100,8 +129,8 @@ class GossipProtocol:
             self.msg_count += 1
             self.latency_samples.append(end - start)
 
-        # forward
-        peers = list(self.node.peers or [])
+        # forward - only to reachable peers
+        peers = self._get_reachable_peers()
         if not peers:
             return
         fanout = min(self.fanout, len(peers))
@@ -110,9 +139,16 @@ class GossipProtocol:
 
     # ------------------------------------------------------------------
     def _send_message(self, peer: Tuple[str, int], message_json: str) -> None:
-        """Send framed gossip message to a peer."""
+        """Send framed gossip message to a peer (with optional signing + encryption)."""
         try:
-            payload = message_json.encode("utf-8")
+            to_send = message_json
+
+            # Apply security: sign + encrypt (includes both when encryption enabled)
+            if self.node.security_enabled and self.node.secure_channel:
+                if self.node.config.get("enable_encryption", False):
+                    to_send = self.node.secure_channel.secure_message(message_json)
+
+            payload = to_send.encode("utf-8")
             header = struct.pack("!I", len(payload))
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(2.0)
@@ -157,10 +193,10 @@ class GossipProtocol:
 
     # ------------------------------------------------------------------
     def _reconcile_loop(self) -> None:
-        """Anti-entropy sync between peers."""
+        """Anti-entropy sync between peers (only reachable ones)."""
         while self.running:
             time.sleep(self.reconcile_every)
-            peers = list(self.node.peers or [])
+            peers = self._get_reachable_peers()
             if not peers or not self.msg_store:
                 continue
             print(f"[SYNC] Periodic sync to {len(peers)} peers ({len(self.msg_store)} msgs cached)")

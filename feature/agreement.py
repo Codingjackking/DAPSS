@@ -190,12 +190,19 @@ class ConsensusNode:
         # Vote tracking (candidate only)
         self.vote_count = 0
 
+        # Partition detection
+        self.partition_detected = False
+        self.in_minority = False
+        self._peer_health_cache = {}  # {peer: last_success_time}
+        self._health_check_interval = 2.0  # Check peer health every 2 seconds
+
         # Running flag
         self.running = False
 
         # Threads
         self._heartbeat_thread = None
         self._election_thread = None
+        self._partition_monitor_thread = None
 
     def start(self) -> None:
         """Start the consensus protocol"""
@@ -208,6 +215,10 @@ class ConsensusNode:
         # Start election timeout monitoring
         self._election_thread = threading.Thread(target=self._election_timeout_loop, daemon=True)
         self._election_thread.start()
+
+        # Start partition detection monitoring
+        self._partition_monitor_thread = threading.Thread(target=self._partition_monitor_loop, daemon=True)
+        self._partition_monitor_thread.start()
 
         # Register node in cluster
         self._register_self()
@@ -240,6 +251,10 @@ class ConsensusNode:
 
     def become_candidate(self) -> None:
         """Transition to CANDIDATE state and start election"""
+        # Check quorum before starting election
+        if self.in_minority:
+            return
+
         self.state = self.CANDIDATE
         self.current_term = self.node.lamport_clock.tick()  # Increment term using Lamport clock
         self.voted_for = self.node_id
@@ -315,7 +330,9 @@ class ConsensusNode:
                 time_since_heartbeat = time.time() - self.last_heartbeat
 
                 if time_since_heartbeat > self.election_timeout:
-                    print(f"[TIMEOUT] Leader timeout ({time_since_heartbeat:.2f}s), starting election")
+                    # Don't spam timeout messages if we're in minority partition
+                    if not self.in_minority:
+                        print(f"[TIMEOUT] Leader timeout ({time_since_heartbeat:.2f}s), starting election")
                     self.become_candidate()
                     election_start_time = time.time()
 
@@ -327,7 +344,9 @@ class ConsensusNode:
                 time_since_election = time.time() - election_start_time
 
                 if time_since_election > self.election_timeout:
-                    print(f"[TIMEOUT] Election timeout ({time_since_election:.2f}s), restarting election")
+                    # Don't spam timeout messages if we're in minority partition
+                    if not self.in_minority:
+                        print(f"[TIMEOUT] Election timeout ({time_since_election:.2f}s), restarting election")
                     # Randomize timeout to prevent another split vote
                     self.election_timeout = random.uniform(150, 300) / 1000
                     self.become_candidate()
@@ -422,6 +441,11 @@ class ConsensusNode:
             True if entry will be committed (async), False if failed
         """
         if self.state != self.LEADER:
+            return False
+
+        # Check quorum before accepting writes
+        if not self._has_quorum():
+            print(f"[PARTITION] Cannot commit entry - lost quorum")
             return False
 
         # Assign Lamport timestamp (term)
@@ -521,6 +545,9 @@ class ConsensusNode:
             self._handle_rejoin_request(msg)
         elif msg_type == "STATE_SYNC":
             self._handle_state_sync(msg)
+        elif msg_type == "HEALTH_CHECK":
+            # Health check from partition monitor - silently acknowledge (no logging)
+            pass
         else:
             print(f"[CONSENSUS] Unknown message type: {msg_type}")
 
@@ -709,6 +736,107 @@ class ConsensusNode:
         self.last_heartbeat = time.time()
 
         print(f"[REJOIN] State synchronized (term={self.current_term})")
+
+    # ========================================================================
+    # Partition Detection
+    # ========================================================================
+
+    def _count_reachable_peers(self) -> int:
+        """
+        Count how many peers are currently reachable.
+        Updates health cache for both successful and failed checks.
+
+        Returns:
+            Number of reachable peers
+        """
+        reachable = 0
+        for peer in self.node.peers:
+            if self._is_peer_alive(peer):
+                reachable += 1
+                # Mark as reachable (positive timestamp)
+                self._peer_health_cache[peer] = time.time()
+            else:
+                # Mark as unreachable (negative timestamp indicates failure)
+                self._peer_health_cache[peer] = -time.time()
+
+        return reachable
+
+    def _is_peer_alive(self, peer: Tuple[str, int], timeout: float = 0.5) -> bool:
+        """
+        Quick health check to see if a peer is reachable.
+        Sends a HEALTH_CHECK message to avoid "empty connection" warnings.
+
+        Args:
+            peer: (host, port) tuple
+            timeout: Connection timeout in seconds
+
+        Returns:
+            True if peer responds, False otherwise
+        """
+        try:
+            # Send a lightweight health check message
+            health_check = json.dumps({"type": "HEALTH_CHECK"})
+            payload = health_check.encode("utf-8")
+            header = struct.pack("!I", len(payload))
+
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(timeout)
+                s.connect(peer)
+                s.sendall(header + payload)
+                return True
+        except:
+            return False
+
+    def _has_quorum(self) -> bool:
+        """
+        Check if this node can reach a quorum (majority) of the cluster.
+
+        Returns:
+            True if quorum is reachable
+        """
+        if not self.node.peers:
+            # Single-node cluster always has quorum
+            return True
+
+        total_nodes = len(self.node.peers) + 1  # peers + self
+        majority = (total_nodes // 2) + 1
+        reachable = self._count_reachable_peers() + 1  # +1 for self
+
+        return reachable >= majority
+
+    def _partition_monitor_loop(self) -> None:
+        """
+        Continuously monitor for network partitions.
+        Detects when this node loses quorum.
+        """
+        while self.running:
+            time.sleep(self._health_check_interval)
+
+            has_quorum = self._has_quorum()
+
+            # Partition detected: we lost quorum
+            if not has_quorum and not self.in_minority:
+                total_nodes = len(self.node.peers) + 1
+                reachable = self._count_reachable_peers() + 1
+                majority = (total_nodes // 2) + 1
+
+                print(f"[PARTITION] ⚠️  Network partition detected!")
+                print(f"[PARTITION] Reachable: {reachable}/{total_nodes} (need {majority} for quorum)")
+                print(f"[PARTITION] Entering minority partition mode (read-only)")
+
+                self.partition_detected = True
+                self.in_minority = True
+
+                # If we're leader, step down
+                if self.state == self.LEADER:
+                    print(f"[PARTITION] Stepping down as leader (lost quorum)")
+                    self.become_follower(self.current_term)
+
+            # Partition healed: we regained quorum
+            elif has_quorum and self.in_minority:
+                print(f"[PARTITION] ✓ Partition healed - quorum restored!")
+                self.partition_detected = False
+                self.in_minority = False
 
     # ========================================================================
     # Network Communication
