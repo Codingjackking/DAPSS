@@ -8,7 +8,7 @@ import hmac
 import secrets
 import json
 import time
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Tuple
 from cryptography.fernet import Fernet
 import base64
 
@@ -125,7 +125,7 @@ class ClusterAuth:
             peer: (host, port) tuple
         """
         self._authenticated_peers[peer] = time.time()
-        print(f"[AUTH] ✓ Peer {peer[0]}:{peer[1]} authenticated")
+        print(f"[AUTH] Peer {peer[0]}:{peer[1]} authenticated")
 
     def is_authenticated(self, peer: Tuple[str, int]) -> bool:
         """
@@ -227,7 +227,7 @@ class ClusterAuth:
             if self.verify_signature(payload, signature):
                 return payload
             else:
-                print("[AUTH] ✗ Message signature verification failed")
+                print("[AUTH] Message signature verification failed")
                 return None
 
         except Exception as e:

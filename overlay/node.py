@@ -65,7 +65,6 @@ class Node:
             if encryption_key == "put_generated_key_here_or_leave_empty_to_auto_generate":
                 encryption_key = None
             self.secure_channel = SecureChannel(cluster_secret, encryption_key)
-            # Don't print here - will print in start_server() for visibility
         else:
             self.secure_channel = None
 
@@ -107,8 +106,6 @@ class Node:
     # ------------------------------------------------------------------
     def start_server(self):
         """Main TCP server loop."""
-        import atexit
-        from overlay.discovery import register_node, unregister_node
 
         # Ensure safe shutdown deregistration
         atexit.register(lambda: unregister_node(self.host, self.port))
@@ -137,9 +134,9 @@ class Node:
             if self.config.get("enable_node_auth", False):
                 features.append("Node Authentication")
 
-            print(f"[SECURITY] ✓ Enabled: {', '.join(features)}")
+            print(f"[SECURITY] Enabled: {', '.join(features)}")
         else:
-            print(f"[SECURITY] ✗ Disabled (insecure mode)")
+            print("[SECURITY] Disabled (insecure mode)")
 
         self.consensus.start()  # Start agreement protocol
         self.gossip.start()
@@ -214,7 +211,7 @@ class Node:
                 self._handle_auth_response(data)
                 return
 
-            # Handle secured messages (encrypted + signed)
+            # Handle secured messages 
             if "type" in data and data["type"] == "SECURE" and self.security_enabled:
                 decrypted = self.secure_channel.unsecure_message(data_str)
                 if decrypted is None:
@@ -228,16 +225,16 @@ class Node:
             if "type" in data and data["type"] in [
                 "VOTE_REQUEST", "VOTE_RESPONSE", "HEARTBEAT",
                 "APPEND_STATE", "ACK", "COMMIT",
-                "STATE_CHANGE_REQUEST", "REJOIN_REQUEST", "STATE_SYNC"
+                "STATE_CHANGE_REQUEST", "HEALTH_CHECK"
             ]:
-                # Route to consensus protocol
+                # send to consensus protocol
                 self.consensus.handle_consensus_message(data)
             else:
-                # Route to gossip protocol
+                # send to gossip protocol
                 self.gossip.gossip_message(data_str)
 
         except (json.JSONDecodeError, UnicodeDecodeError):
-            # Binary message or malformed JSON - treat as gossip
+            # binary message or malformed JSON - treat as gossip
             encoded = base64.b64encode(payload).decode("ascii")
             msg = Message(topic="binary", content=encoded, sender=f"{self.host}:{self.port}")
             self.gossip.gossip_message(msg.to_json())
@@ -294,7 +291,7 @@ class Node:
             except Exception as e:
                 print(f"[AUTH] Error parsing node_id: {e}")
         else:
-            print(f"[AUTH] ✗ Authentication failed for {node_id}")
+            print(f"[AUTH] Authentication failed for {node_id}")
 
     def _send_auth_message(self, peer: Tuple[str, int], msg_json: str):
         """Send an authentication message to a peer."""
@@ -341,7 +338,7 @@ class Node:
         try:
             self._send_auth_message(peer, json.dumps(challenge_msg))
 
-            # Wait briefly for response (handled asynchronously in _handle_auth_response)
+            # Wait briefly for response 
             time.sleep(0.5)
 
             # Check if peer is now authenticated

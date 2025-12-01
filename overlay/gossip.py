@@ -98,12 +98,11 @@ class GossipProtocol:
                 self._handle_control_message(payload)
                 return
 
-            # Gateway Model: Handle external messages (lamport_timestamp=0)
+            # Handle external messages 
             lamport_ts = payload.get("lamport_timestamp", 0)
 
             if lamport_ts == 0:
-                # This is an external message (from CLI) - we're the gateway
-                # Assign a proper timestamp from this node's clock
+                # external message from CLI publisher
                 new_ts = self.node.lamport_clock.tick()
                 payload["lamport_timestamp"] = new_ts
                 # Re-serialize with new timestamp for gossip forwarding
@@ -113,7 +112,7 @@ class GossipProtocol:
                 # Normal cluster message - update clock
                 self.node.lamport_clock.update(lamport_ts)
 
-            # persist AFTER timestamp fix (so we store the corrected message)
+            
             with self._store_lock:
                 self.msg_store[msg_id] = message_json
                 self._append_log(message_json)
@@ -143,7 +142,7 @@ class GossipProtocol:
         try:
             to_send = message_json
 
-            # Apply security: sign + encrypt (includes both when encryption enabled)
+          
             if self.node.security_enabled and self.node.secure_channel:
                 if self.node.config.get("enable_encryption", False):
                     to_send = self.node.secure_channel.secure_message(message_json)

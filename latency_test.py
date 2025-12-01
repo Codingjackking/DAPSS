@@ -86,15 +86,15 @@ def main():
     elapsed = time.time() - start_time
 
     print("="*60)
-    print(f"\n[RESULTS]")
+    print("\n[RESULTS]")
     print(f"  Sent: {sent_count}/{num_messages}")
     print(f"  Duration: {elapsed:.2f}s")
 
-    print(f"\n[NEXT STEPS]")
-    print(f"  1. Wait a few seconds for message propagation")
-    print(f"  2. Run the analysis script:")
-    print(f"     python analyze_latency.py")
-    print(f"\n  This will analyze latency_log_*.jsonl files and show statistics")
+    print("\n[NEXT STEPS]")
+    print("  1. Wait a few seconds for message propagation")
+    print("  2. Run the analysis script:")
+    print("     python analyze_latency.py")
+    print("\n  This will analyze latency_log_*.jsonl files and show statistics")
 
     print("\n" + "="*60)
 

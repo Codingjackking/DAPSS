@@ -1,4 +1,3 @@
-# feature/message.py
 import json
 import socket
 import struct

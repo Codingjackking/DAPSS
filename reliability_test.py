@@ -78,17 +78,17 @@ def main():
         time.sleep(0.1)
 
     print("="*60)
-    print(f"\n[RESULTS]")
+    print("\n[RESULTS]")
     print(f"  Sent: {sent_count}/{num_messages}")
     print(f"  Failed: {failed_count}/{num_messages}")
 
-    print(f"\n[INSTRUCTIONS]")
-    print(f"Check your subscriber node consoles to verify:")
+    print("\n[INSTRUCTIONS]")
+    print("Check your subscriber node consoles to verify:")
     print(f"  1. All {num_messages} messages were received (msg_id 0 to {num_messages-1})")
-    print(f"  2. Messages appear on all subscriber nodes (gossip works)")
-    print(f"  3. No messages are missing (reliable delivery)")
-    print(f"  4. Check for duplicates (some are expected with gossip)")
-    print(f"  5. Lamport timestamps are increasing")
+    print("  2. Messages appear on all subscriber nodes (gossip works)")
+    print("  3. No messages are missing (reliable delivery)")
+    print("  4. Check for duplicates (some are expected with gossip)")
+    print("  5. Lamport timestamps are increasing")
 
     print("\n" + "="*60)
 
