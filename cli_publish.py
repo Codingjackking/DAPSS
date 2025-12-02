@@ -1,7 +1,7 @@
 import sys
 import socket
 import struct
-from feature.message import Message
+from overlay.feature.message import Message
 from overlay.discovery import registry_discover_nodes, discover_nodes as udp_discover
 
 

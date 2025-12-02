@@ -1,7 +1,7 @@
 import sys
 import threading
 from overlay.node import Node
-from subscriber.subscriber import Subscriber
+from application.subscriber.subscriber import Subscriber
 
 
 def start_node(node: Node):

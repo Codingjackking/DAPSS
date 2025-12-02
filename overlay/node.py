@@ -7,13 +7,14 @@ import threading
 import atexit
 import time
 
+
 from typing import List, Tuple, Optional
 from overlay.gossip import GossipProtocol
 from overlay.discovery import PeerDiscovery, register_node, unregister_node
-from feature.message import Message
-from feature.timestamp import LamportClock
-from feature.agreement import ConsensusNode
-from feature.security import SecureChannel
+from overlay.feature.message import Message
+from overlay.feature.timestamp import LamportClock
+from overlay.feature.agreement import ConsensusNode
+from overlay.feature.security import SecureChannel
 
 MAX_FRAME_BYTES = 10 * 1024 * 1024  # 10 MB cap
 
@@ -107,8 +108,6 @@ class Node:
     # ------------------------------------------------------------------
     def start_server(self):
         """Main TCP server loop."""
-        import atexit
-        from overlay.discovery import register_node, unregister_node
 
         # Ensure safe shutdown deregistration
         atexit.register(lambda: unregister_node(self.host, self.port))
@@ -119,6 +118,10 @@ class Node:
             topics = list(self.subscriber.subscriptions)
         register_node(self.host, self.port, topics)
 
+        if self.subscriber:
+            self._recover_from_disk()   
+        else:
+            print("[RECOVER] No subscriber attached, skipping message recovery.")
         # --- TCP server setup ---
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

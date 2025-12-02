@@ -1,5 +1,5 @@
 from typing import Optional, Union
-from feature.message import Message
+from overlay.feature.message import Message
 
 
 class Publisher:
