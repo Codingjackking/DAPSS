@@ -101,10 +101,10 @@ class Subscriber:
 
             print(f"[{self.name}] Received '{topic}': {content} [Lamport:{current_clock}]")
 
-            # Log latency data if enabled (for benchmarking)
+            # Log latency data if enabled for benchmarking
             if self.latency_log_enabled:
                 try:
-                    # Try to extract send_time from content if it's JSON
+                    # extract send_time from content 
                     content_data = json.loads(content)
                     if "send_time" in content_data:
                         latency_ms = (receive_time - content_data["send_time"]) * 1000
@@ -117,10 +117,9 @@ class Subscriber:
                         }
                         with open(self.latency_log_file, "a") as f:
                             f.write(json.dumps(log_entry) + "\n")
-                except:
-                    pass  # Content not JSON or no send_time, skip logging
+                except Exception:
+                    pass 
         else:
-            # You could choose to silently ignore or log filtered messages
             print(f"[INFO] Ignored message for unsubscribed topic '{topic}'")
 
     # ------------------------------------------------------------

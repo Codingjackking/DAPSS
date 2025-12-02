@@ -30,7 +30,7 @@ def send_message(port: int, topic: str, msg_id: int) -> bool:
             header = struct.pack("!I", len(payload))
             s.sendall(header + payload)
         return True
-    except:
+    except Exception:
         return False
 
 
@@ -49,7 +49,7 @@ def main():
     print("="*60)
     print(f"Publisher Port: {publisher_port}")
     print(f"Duration: {duration} seconds")
-    print(f"\nThis will send messages as fast as possible to measure throughput.\n")
+    print("\nThis will send messages as fast as possible to measure throughput.\n")
 
     try:
         input("Press Enter to start (Ctrl+C to cancel)...")
@@ -77,7 +77,7 @@ def main():
     elapsed = time.time() - start_time
 
     print("="*60)
-    print(f"\n[RESULTS]")
+    print("\n[RESULTS]")
     print(f"  Duration: {elapsed:.2f} seconds")
     print(f"  Total Sent: {msg_count}")
     print(f"  Failed: {failed_count}")

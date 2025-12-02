@@ -16,7 +16,7 @@ import socket
 import struct
 import threading
 import copy
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, Optional, Tuple, Any
 
 
 class SharedStateManager:
@@ -175,7 +175,7 @@ class ConsensusNode:
         self.voted_for = None
         self.leader_id = None
 
-        # Timing (Raft standard values)
+        # Timing 
         self.election_timeout = random.uniform(150, 300) / 1000  # 150-300ms in seconds
         self.heartbeat_interval = 0.05  # 50ms
         self.last_heartbeat = time.time()
@@ -226,13 +226,12 @@ class ConsensusNode:
     def stop(self) -> None:
         """Stop the consensus protocol"""
         self.running = False
-        print(f"[CONSENSUS] Stopping")
+        print("[CONSENSUS] Stopping")
 
     def _register_self(self) -> None:
         """Register this node in the cluster"""
         entry = self.state_manager.create_entry("add_node", node_id=self.node_id)
-        # This will go through consensus if we're not alone
-        # For now, just apply locally
+  
         if not self.state_manager.state["cluster"]["nodes"]:
             entry["lamport_ts"] = self.node.lamport_clock.tick()
             self.state_manager.apply_entry(entry)
@@ -262,7 +261,7 @@ class ConsensusNode:
 
         print(f"[ELECTION] Starting election for term {self.current_term}")
 
-        # Check if we already have majority (single-node cluster)
+        # Check if we already have majority 
         total_nodes = len(self.node.peers) + 1
         majority = (total_nodes // 2) + 1
 
@@ -314,9 +313,9 @@ class ConsensusNode:
 
         # Count how many nodes we had when we became leader
         # (we had majority which means vote_count >= (old_total // 2) + 1)
-        old_total = self.vote_count * 2  # Rough estimate
+        old_total = self.vote_count * 2  
 
-        # If cluster significantly grew, we should re-elect
+        # If cluster significantly grew, re-elect
         if total_nodes > old_total:
             print(f"[CONSENSUS] Cluster grew ({old_total} → {total_nodes}), stepping down for re-election")
             self.become_follower(self.current_term)
@@ -330,24 +329,24 @@ class ConsensusNode:
                 time_since_heartbeat = time.time() - self.last_heartbeat
 
                 if time_since_heartbeat > self.election_timeout:
-                    # Don't spam timeout messages if we're in minority partition
+                  
                     if not self.in_minority:
                         print(f"[TIMEOUT] Leader timeout ({time_since_heartbeat:.2f}s), starting election")
                     self.become_candidate()
                     election_start_time = time.time()
 
             elif self.state == self.CANDIDATE:
-                # Candidates also need to timeout if election fails (split vote)
+                #timeout if election fails (split vote)
                 if election_start_time is None:
                     election_start_time = time.time()
 
                 time_since_election = time.time() - election_start_time
 
                 if time_since_election > self.election_timeout:
-                    # Don't spam timeout messages if we're in minority partition
+                   
                     if not self.in_minority:
                         print(f"[TIMEOUT] Election timeout ({time_since_election:.2f}s), restarting election")
-                    # Randomize timeout to prevent another split vote
+                    
                     self.election_timeout = random.uniform(150, 300) / 1000
                     self.become_candidate()
                     election_start_time = time.time()
@@ -356,7 +355,7 @@ class ConsensusNode:
                 # Leader state - reset election tracking
                 election_start_time = None
 
-            time.sleep(0.05)  # Check every 50ms
+            time.sleep(0.05) 
 
     # ========================================================================
     # Heartbeat Mechanism (Empty Heartbeats)
@@ -371,12 +370,12 @@ class ConsensusNode:
                     "type": "HEARTBEAT",
                     "term": self.current_term,
                     "leader_id": self.node_id
-                    # NO shared_state here - empty heartbeat for efficiency
+                    
                 }
 
                 self._broadcast_consensus_message(heartbeat)
 
-                # Log every 20th heartbeat (once per second) to avoid spam
+               
                 heartbeat_count += 1
                 if heartbeat_count % 20 == 0:
                     print(f"[HEARTBEAT] Sent {heartbeat_count} heartbeats (term={self.current_term})")
@@ -402,7 +401,7 @@ class ConsensusNode:
             True if state change committed, False otherwise
         """
         if self.state == self.LEADER:
-            # We're the leader, process directly
+           
             return self._append_entry(entry)
         else:
             # Forward request to leader
@@ -445,7 +444,7 @@ class ConsensusNode:
 
         # Check quorum before accepting writes
         if not self._has_quorum():
-            print(f"[PARTITION] Cannot commit entry - lost quorum")
+            print("[PARTITION] Cannot commit entry - lost quorum")
             return False
 
         # Assign Lamport timestamp (term)
@@ -453,7 +452,7 @@ class ConsensusNode:
         entry["lamport_ts"] = lamport_ts
 
         # Calculate majority needed
-        total_nodes = len(self.node.peers) + 1  # peers + self
+        total_nodes = len(self.node.peers) + 1  
         majority_needed = (total_nodes // 2) + 1
 
         # Track pending ACKs
@@ -466,7 +465,7 @@ class ConsensusNode:
 
         print(f"[LEADER] APPEND entry L:{lamport_ts} action={entry['action']} (need {majority_needed} ACKs)")
 
-        # COMMAND followers to append (not asking permission!)
+        # Tell followers to append 
         append_msg = {
             "type": "APPEND_STATE",
             "term": self.current_term,
@@ -541,12 +540,8 @@ class ConsensusNode:
             self._handle_commit(msg)
         elif msg_type == "STATE_CHANGE_REQUEST":
             self._handle_state_change_request(msg)
-        elif msg_type == "REJOIN_REQUEST":
-            self._handle_rejoin_request(msg)
-        elif msg_type == "STATE_SYNC":
-            self._handle_state_sync(msg)
         elif msg_type == "HEALTH_CHECK":
-            # Health check from partition monitor - silently acknowledge (no logging)
+            #ignore health check logging
             pass
         else:
             print(f"[CONSENSUS] Unknown message type: {msg_type}")
@@ -709,34 +704,6 @@ class ConsensusNode:
         entry = msg["entry"]
         self._append_entry(entry)
 
-    def _handle_rejoin_request(self, msg: Dict[str, Any]) -> None:
-        """Handle rejoin request from recovering node (leader only)"""
-        if self.state != self.LEADER:
-            return
-
-        node_id = msg["node_id"]
-
-        print(f"[LEADER] Node {node_id} requesting to rejoin, sending state")
-
-        # Send full state snapshot
-        state_sync = {
-            "type": "STATE_SYNC",
-            "term": self.current_term,
-            "state": self.state_manager.get_state()
-        }
-
-        # TODO: Send to requesting node
-        print(f"[LEADER] Sent state sync to {node_id}")
-
-    def _handle_state_sync(self, msg: Dict[str, Any]) -> None:
-        """Handle state sync from leader (rejoining node)"""
-        self.current_term = msg["term"]
-        self.state_manager.set_state(msg["state"])
-        self.state = self.FOLLOWER
-        self.last_heartbeat = time.time()
-
-        print(f"[REJOIN] State synchronized (term={self.current_term})")
-
     # ========================================================================
     # Partition Detection
     # ========================================================================
@@ -774,7 +741,7 @@ class ConsensusNode:
             True if peer responds, False otherwise
         """
         try:
-            # Send a lightweight health check message
+            # Send a health check message
             health_check = json.dumps({"type": "HEALTH_CHECK"})
             payload = health_check.encode("utf-8")
             header = struct.pack("!I", len(payload))
@@ -784,7 +751,7 @@ class ConsensusNode:
                 s.connect(peer)
                 s.sendall(header + payload)
                 return True
-        except:
+        except Exception:
             return False
 
     def _has_quorum(self) -> bool:
@@ -795,7 +762,6 @@ class ConsensusNode:
             True if quorum is reachable
         """
         if not self.node.peers:
-            # Single-node cluster always has quorum
             return True
 
         total_nodes = len(self.node.peers) + 1  # peers + self
@@ -820,21 +786,21 @@ class ConsensusNode:
                 reachable = self._count_reachable_peers() + 1
                 majority = (total_nodes // 2) + 1
 
-                print(f"[PARTITION] ⚠️  Network partition detected!")
+                print("[PARTITION] Network partition detected!")
                 print(f"[PARTITION] Reachable: {reachable}/{total_nodes} (need {majority} for quorum)")
-                print(f"[PARTITION] Entering minority partition mode (read-only)")
+                print("[PARTITION] Entering minority partition mode (read-only)")
 
                 self.partition_detected = True
                 self.in_minority = True
 
-                # If we're leader, step down
+                # If leader, step down
                 if self.state == self.LEADER:
-                    print(f"[PARTITION] Stepping down as leader (lost quorum)")
+                    print("[PARTITION] Stepping down as leader (lost quorum)")
                     self.become_follower(self.current_term)
 
-            # Partition healed: we regained quorum
+            # Partition healed: regained quorum
             elif has_quorum and self.in_minority:
-                print(f"[PARTITION] ✓ Partition healed - quorum restored!")
+                print("[PARTITION] ✓ Partition healed - quorum restored!")
                 self.partition_detected = False
                 self.in_minority = False
 
@@ -856,16 +822,16 @@ class ConsensusNode:
             host, port_str = node_id.split(":")
             port = int(port_str)
 
-            # Check if this peer exists in our peer list
+            # Check if peer exists in peer list
             for peer in self.node.peers:
                 if peer[0] == host and peer[1] == port:
                     return peer
 
-            # If not in peer list but matches our own ID, return None (can't send to self)
+            # If not in peer list but matches own ID, return None 
             if node_id == self.node_id:
                 return None
 
-            # Peer not in list, return the parsed tuple anyway (might be reachable)
+            # Peer not in list, return the parsed tuple
             return (host, port)
         except Exception:
             return None
@@ -902,6 +868,6 @@ class ConsensusNode:
                 s.settimeout(1.0)
                 s.connect(peer)
                 s.sendall(header + payload)
-        except Exception as e:
+        except Exception:
             # Silently fail (peer might be down)
             pass

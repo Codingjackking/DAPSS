@@ -32,7 +32,7 @@ def read_latency_logs() -> Dict[str, List[Dict]]:
                 try:
                     entry = json.loads(line.strip())
                     entries.append(entry)
-                except:
+                except Exception:
                     pass
 
         if entries:

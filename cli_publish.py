@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     print(f"[INFO] Found {len(active_nodes)} active node(s): {active_nodes}")
 
-    # Gateway Model: Send to ONE node instead of all (prevents duplicate timestamps)
+    # Gateway Model: Send to one node instead of all 
     # The gateway node will assign a proper Lamport timestamp and gossip to the cluster
     gateway_node = active_nodes[0]  # Pick first node as gateway
 
