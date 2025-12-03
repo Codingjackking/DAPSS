@@ -1,5 +1,6 @@
 import sys
 import threading
+import time
 from overlay.node import Node
 from application.subscriber.subscriber import Subscriber
 
@@ -116,7 +117,7 @@ if __name__ == "__main__":
         print("[INFO] Interactive mode disabled (--no-interactive).")
         try:
             while True:
-                pass  # Keep the process alive
+                time.sleep(0.5)
         except KeyboardInterrupt:
             print(f"\n[SHUTDOWN] Node {port} stopped.")
         sys.exit(0)
@@ -149,6 +150,8 @@ if __name__ == "__main__":
 
                 elif cmd == "quit":
                     print(f"\n[SHUTDOWN] Node {port} stopping...")
+                    if node.metrics:
+                        node.metrics.write_summary()
                     break
 
                 else:
@@ -156,9 +159,13 @@ if __name__ == "__main__":
 
             except EOFError:
                 print(f"\n[SHUTDOWN] Node {port} stopping...")
+                if node.metrics:
+                        node.metrics.write_summary()
                 break
             except Exception as e:
                 print(f"[ERROR] Command failed: {e}")
 
     except KeyboardInterrupt:
         print(f"\n[SHUTDOWN] Node {port} stopped.")
+        if node.metrics:
+                        node.metrics.write_summary()

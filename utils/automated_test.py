@@ -3,9 +3,10 @@ import time
 import socket
 import json
 import struct
-from datetime import datetime
 import os
 import re
+from datetime import datetime
+
 
 HOST = "127.0.0.1"
 
@@ -486,7 +487,7 @@ def test_tamper_detection(port):
                 timeout=5
             )
             
-            print(f"[DEBUG] tamper_send output: {result.stdout}")
+            # print(f"[DEBUG] tamper_send output: {result.stdout}")
             
             time.sleep(2)
             

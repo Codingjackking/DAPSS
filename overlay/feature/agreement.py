@@ -18,6 +18,7 @@ import threading
 import copy
 from typing import Dict, Optional, Tuple, Any
 
+import utils.metrics
 
 class SharedStateManager:
     """
@@ -204,6 +205,9 @@ class ConsensusNode:
         self._election_thread = None
         self._partition_monitor_thread = None
 
+        self.metrics = None
+
+        
     def start(self) -> None:
         """Start the consensus protocol"""
         if self.running:
@@ -242,10 +246,14 @@ class ConsensusNode:
 
     def become_follower(self, term: int) -> None:
         """Transition to FOLLOWER state"""
+        old_state = self.state
         self.state = self.FOLLOWER
         self.current_term = term
         self.voted_for = None
         self.last_heartbeat = time.time()
+
+        if self.metrics:
+            self.metrics.record_state_change(old_state, "FOLLOWER", term)
         print(f"[CONSENSUS] Became FOLLOWER (term={term})")
 
     def become_candidate(self) -> None:
@@ -253,13 +261,20 @@ class ConsensusNode:
         # Check quorum before starting election
         if self.in_minority:
             return
-
+        
+        old_state = self.state
         self.state = self.CANDIDATE
         self.current_term = self.node.lamport_clock.tick()  # Increment term using Lamport clock
         self.voted_for = self.node_id
         self.vote_count = 1  # Vote for self
 
+        if self.metrics:
+            self.metrics.record_state_change(old_state, "CANDIDATE", self.current_term)
+
         print(f"[ELECTION] Starting election for term {self.current_term}")
+
+        if self.metrics:
+            self.metrics.record_vote_request(self.current_term, self.node_id)
 
         # Check if we already have majority 
         total_nodes = len(self.node.peers) + 1
@@ -282,8 +297,12 @@ class ConsensusNode:
 
     def become_leader(self) -> None:
         """Transition to LEADER state"""
+        old_state = self.state
         self.state = self.LEADER
         self.leader_id = self.node_id
+
+        if self.metrics:
+            self.metrics.record_state_change(old_state, "LEADER", self.current_term)
 
         print(f"[CONSENSUS] Became LEADER (term={self.current_term})")
 
@@ -369,13 +388,14 @@ class ConsensusNode:
                 heartbeat = {
                     "type": "HEARTBEAT",
                     "term": self.current_term,
-                    "leader_id": self.node_id
-                    
+                    "leader_id": self.node_id    
                 }
 
+                if self.metrics:
+                    self.metrics.record_heartbeat(is_sender=True, term=self.current_term)
+                
                 self._broadcast_consensus_message(heartbeat)
 
-               
                 heartbeat_count += 1
                 if heartbeat_count % 20 == 0:
                     print(f"[HEARTBEAT] Sent {heartbeat_count} heartbeats (term={self.current_term})")
@@ -560,6 +580,10 @@ class ConsensusNode:
         if candidate_term >= self.current_term and self.voted_for is None:
             self.voted_for = candidate_id
             granted = True
+
+            if self.metrics:
+                self.metrics.record_vote_granted(candidate_term, self.node_id)
+            
             print(f"[ELECTION] Voted for {candidate_id} (term={candidate_term})")
 
         # Send vote response
@@ -600,6 +624,9 @@ class ConsensusNode:
         """Handle heartbeat from leader"""
         leader_term = msg["term"]
         leader_id = msg["leader_id"]
+
+        if self.metrics:
+            self.metrics.record_heartbeat(is_sender=False, term=leader_term)
 
         # If term is higher, become follower
         if leader_term > self.current_term:
@@ -750,8 +777,14 @@ class ConsensusNode:
                 s.settimeout(timeout)
                 s.connect(peer)
                 s.sendall(header + payload)
+                if self.metrics:
+                    peer_str = f"{peer[0]}:{peer[1]}"
+                    self.metrics.record_peer_health(peer_str, is_healthy=True, rtt_ms=timeout*1000)
                 return True
         except Exception:
+            if self.metrics:
+                peer_str = f"{peer[0]}:{peer[1]}"
+                self.metrics.record_peer_health(peer_str, is_healthy=False)
             return False
 
     def _has_quorum(self) -> bool:
@@ -798,9 +831,20 @@ class ConsensusNode:
                     print("[PARTITION] Stepping down as leader (lost quorum)")
                     self.become_follower(self.current_term)
 
+                if self.metrics:
+                    for peer in self.node.peers:
+                        if peer not in self._peer_health_cache or self._peer_health_cache[peer] < 0:
+                            peer_str = f"{peer[0]}:{peer[1]}"
+                            self.metrics.record_partition_detected(peer_str)
+
             # Partition healed: regained quorum
             elif has_quorum and self.in_minority:
                 print("[PARTITION] ✓ Partition healed - quorum restored!")
+                if self.metrics:
+                    for peer in self.node.peers:
+                        if peer in self._peer_health_cache and self._peer_health_cache[peer] > 0:
+                            peer_str = f"{peer[0]}:{peer[1]}"
+                            self.metrics.record_partition_healed(peer_str)
                 self.partition_detected = False
                 self.in_minority = False
 

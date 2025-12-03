@@ -10,7 +10,7 @@ from typing import List, Dict
 
 def read_latency_logs() -> Dict[str, List[Dict]]:
     """Read all latency log files"""
-    log_files = glob.glob("latency_log_*.jsonl")
+    log_files = glob.glob("latency_log_*.json")
 
     if not log_files:
         print("[ERROR] No latency log files found!")
@@ -23,8 +23,8 @@ def read_latency_logs() -> Dict[str, List[Dict]]:
     logs_by_node = {}
 
     for log_file in log_files:
-        # Extract port from filename (e.g., latency_log_5002.jsonl -> 5002)
-        port = log_file.replace("latency_log_", "").replace(".jsonl", "")
+        # Extract port from filename (e.g., latency_log_5002.json -> 5002)
+        port = log_file.replace("latency_log_", "").replace(".json", "")
 
         entries = []
         with open(log_file, "r") as f:
@@ -113,8 +113,8 @@ def main():
     # Cleanup option
     print("="*60)
     print("\nTo clean up log files, run:")
-    print("  del latency_log_*.jsonl  (Windows)")
-    print("  rm latency_log_*.jsonl   (Linux)")
+    print("  del latency_log_*.json  (Windows)")
+    print("  rm latency_log_*.json   (Linux)")
     print()
 
 

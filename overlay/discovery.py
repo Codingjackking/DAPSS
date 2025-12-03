@@ -31,6 +31,7 @@ class PeerDiscovery:
 
     def __init__(self, node):
         self.node = node
+        self.metrics = None
         self.running = False
 
     # ---------------------------------------------------------------

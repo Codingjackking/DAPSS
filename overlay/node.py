@@ -15,6 +15,7 @@ from overlay.feature.message import Message
 from overlay.feature.timestamp import LamportClock
 from overlay.feature.agreement import ConsensusNode
 from overlay.feature.security import SecureChannel
+from utils.metrics import initialize_metrics
 
 MAX_FRAME_BYTES = 10 * 1024 * 1024  # 10 MB cap
 
@@ -47,6 +48,7 @@ class Node:
     - Combines gossip and peer discovery
     - Persists messages for recovery
     - Maintains consistency across the cluster
+    - Comprehensive metrics tracking
     """
 
     def __init__(self, host: str, port: int, peers: Optional[List[Tuple[str, int]]] = None, config: Optional[dict] = None):
@@ -57,6 +59,12 @@ class Node:
 
         # --- Load configuration ---
         self.config = config or self._load_config()
+
+        # Initialize metrics for this node
+        self.metrics = initialize_metrics(
+            node_id=f"{host}:{port}",
+            metrics_dir="metrics"
+        )
 
         # --- Security ---
         self.security_enabled = self.config.get("enable_node_auth", False)
@@ -79,6 +87,10 @@ class Node:
         self.gossip = GossipProtocol(self)
         self.discovery = PeerDiscovery(self)
 
+        self.gossip.metrics = self.metrics
+        self.consensus.metrics = self.metrics
+        self.discovery.metrics = self.metrics
+
         # --- Persistence paths ---
         self.node_dir = f"log/node_data_{self.port}"
         self.log_file = os.path.join(self.node_dir, "node_log.json")
@@ -87,6 +99,9 @@ class Node:
 
         # --- Register node in cluster registry ---
         atexit.register(lambda: unregister_node(self.host, self.port))
+        
+        # Register metrics cleanup on exit
+        atexit.register(self._on_shutdown)
 
     def _load_config(self) -> dict:
         """Load configuration from config.json"""
@@ -103,6 +118,18 @@ class Node:
         except Exception as e:
             print(f"[WARN] Error loading config: {e}, using defaults")
             return {}
+
+    def _on_shutdown(self):
+        """Called on node shutdown to write final metrics"""
+        if self.metrics:
+            try:
+                print("\n" + "="*60)
+                print("FINAL METRICS SUMMARY")
+                print("="*60)
+                self.metrics.print_summary()
+                self.metrics.write_summary()
+            except Exception as e:
+                print(f"[WARN] Error writing final metrics: {e}")
 
     # ------------------------------------------------------------------
     def start_server(self):
@@ -152,7 +179,7 @@ class Node:
                 conn, addr = server.accept()
                 threading.Thread(target=self._handle_connection, args=(conn, addr), daemon=True).start()
         except KeyboardInterrupt:
-            print(f"[SHUTDOWN] Node {self.port} shutting down gracefully.")
+            print(f"\n[SHUTDOWN] Node {self.port} shutting down gracefully.")
             unregister_node(self.host, self.port)
         finally:
             server.close()
@@ -164,6 +191,8 @@ class Node:
         Handle incoming gossip or control messages.
         Auto-detects framed (binary header) or raw JSON.
         """
+        peer_str = f"{addr[0]}:{addr[1]}"
+        
         try:
             first_byte = conn.recv(1, socket.MSG_PEEK)
             if not first_byte:
@@ -172,17 +201,32 @@ class Node:
             # --- Case 1: Framed message ---
             if first_byte[0] not in (ord("{"), ord("[")):
                 payload = _recv_framed(conn)
+                
+                if self.metrics:
+                    self.metrics.record_connection_attempt(peer_str, success=True)
+                    self.metrics.bytes_received += len(payload)
+                
                 self._process_payload(payload)
                 return
 
             # --- Case 2: Raw JSON message (unframed) ---
             data = self._recv_until_eof(conn)
             if data:
+                if self.metrics:
+                    self.metrics.record_connection_attempt(peer_str, success=True)
+                    self.metrics.bytes_received += len(data.encode('utf-8'))
+                
                 self._process_payload(data.encode("utf-8"))
 
         except (ValueError, ConnectionError, OSError) as e:
+            if self.metrics:
+                self.metrics.record_connection_attempt(peer_str, success=False)
+            
             print(f"[WARN] Connection from {addr} failed: {e}")
         except Exception as e:
+            if self.metrics:
+                self.metrics.record_connection_attempt(peer_str, success=False)
+            
             print(f"[WARN] Receive error from {addr}: {e}")
         finally:
             try:

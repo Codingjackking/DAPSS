@@ -17,7 +17,7 @@ class Subscriber:
 
         # Latency logging support (enabled via command-line flag or environment variable)
         self.latency_log_enabled = enable_latency_log or os.getenv("DAPSS_LATENCY_LOG") == "1"
-        self.latency_log_file = f"latency_log_{node.port}.jsonl" if self.latency_log_enabled else None
+        self.latency_log_file = f"latency_log_{node.port}.json" if self.latency_log_enabled else None
 
         if self.latency_log_enabled:
             print(f"[LATENCY] Logging enabled → {self.latency_log_file}")

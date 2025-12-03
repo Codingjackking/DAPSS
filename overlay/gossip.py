@@ -6,12 +6,11 @@ import threading
 import time
 from statistics import mean
 from typing import Tuple, List
-from utils.metrics import log_adaptive_stats
-
+import utils.metrics
 
 class GossipProtocol:
     """
-    Adaptive, Persistent, and Consistent Gossip Protocol with On-Demand Recovery.
+    Adaptive, Persistent, and Consistent Gossip Protocol with Comprehensive Metrics.
     """
 
     def __init__(self, node, fanout: int = 2, gossip_interval: float = 2.0):
@@ -24,6 +23,7 @@ class GossipProtocol:
 
         # --- metrics ---
         self.msg_count = 0
+        self.metrics = None
         self.latency_samples = []
         self._metrics_lock = threading.Lock()
 
@@ -87,11 +87,13 @@ class GossipProtocol:
         msg_id = self._extract_message_id(message_json)
         with self._seen_lock:
             if msg_id in self.seen:
+                if self.metrics:
+                    self.metrics.record_gossip_duplicate()
                 return
             self.seen.add(msg_id)
 
-        # local delivery and timestamp fix
         start = time.time()
+
         try:
             payload = json.loads(message_json)
             if "control" in payload:
@@ -120,13 +122,20 @@ class GossipProtocol:
             topic = payload.get("topic")
             content = payload.get("content")
             self.node.deliver_message(topic, content)
+
         except Exception as e:
             print(f"[ERROR] Local delivery failed: {e}")
+        
         end = time.time()
 
-        with self._metrics_lock:
-            self.msg_count += 1
-            self.latency_samples.append(end - start)
+        if self.metrics:
+            latency_ms = (end - start) * 1000
+            message_size = len(message_json.encode('utf-8'))
+            self.metrics.record_gossip_received(
+                sender="peer",
+                message_size=message_size,
+                latency_ms=latency_ms
+            )
 
         # forward - only to reachable peers
         peers = self._get_reachable_peers()
@@ -139,6 +148,7 @@ class GossipProtocol:
     # ------------------------------------------------------------------
     def _send_message(self, peer: Tuple[str, int], message_json: str) -> None:
         """Send framed gossip message to a peer (with optional signing + encryption)."""
+        s = None
         try:
             to_send = message_json
 
@@ -153,24 +163,41 @@ class GossipProtocol:
             s.settimeout(2.0)
             s.connect(peer)
             s.sendall(header + payload)
+            
+            if self.metrics:
+                peer_str = f"{peer[0]}:{peer[1]}"
+                self.metrics.record_gossip_sent(peer_str, len(payload))
+            
         except Exception as e:
             print(f"[WARN] Gossip send to {peer} failed: {e}")
+            
+            if self.metrics:
+                peer_str = f"{peer[0]}:{peer[1]}"
+                self.metrics.record_gossip_failure(peer_str, str(e))
+            
         finally:
-            s.close()
+            if s:
+                s.close()
 
     # ------------------------------------------------------------------
     def _adaptive_loop(self) -> None:
         """Adjust fanout/interval dynamically."""
         while self.running:
             time.sleep(self.adapt_every)
-            with self._metrics_lock:
-                peers_n = len(self.node.peers)
+            
+            peers_n = len(self.node.peers)
+            if self.metrics:
                 msg_rate = self.msg_count / self.adapt_every
-                avg_latency = mean(self.latency_samples) if self.latency_samples else 0.0
+                # avg_latency = mean(self.latency_samples) if self.latency_samples else 0.0
+                latency_stats = self.metrics.get_summary()["gossip"]["latency"]
+                avg_latency = latency_stats.get("mean_ms", 0.0) / 1000.0 if latency_stats else 0.0
                 self.msg_count = 0
-                self.latency_samples.clear()
-
+            # self.latency_samples.clear()
             # Adjust fanout & interval
+            else:
+                msg_rate = 0.0
+                avg_latency = 0.0
+
             if peers_n > 10:
                 self.fanout = min(self.max_fanout, 3 + peers_n // 10)
             elif peers_n > 3:
@@ -188,7 +215,11 @@ class GossipProtocol:
             elif 0 < avg_latency < 0.2:
                 self.gossip_interval = max(self.min_interval, self.gossip_interval * 0.9)
 
-            log_adaptive_stats(peers_n, msg_rate, avg_latency, self.fanout, self.gossip_interval)
+            # New comprehensive metrics
+            if self.metrics:
+                self.metrics.log_adaptive_stats(
+                    peers_n, msg_rate, avg_latency, self.fanout, self.gossip_interval
+                )
 
     # ------------------------------------------------------------------
     def _reconcile_loop(self) -> None:

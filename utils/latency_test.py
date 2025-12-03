@@ -94,7 +94,7 @@ def main():
     print("  1. Wait a few seconds for message propagation")
     print("  2. Run the analysis script:")
     print("     python analyze_latency.py")
-    print("\n  This will analyze latency_log_*.jsonl files and show statistics")
+    print("\n  This will analyze latency_log_*.json files and show statistics")
 
     print("\n" + "="*60)
 
