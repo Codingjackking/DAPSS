@@ -1,6 +1,14 @@
-# DAPSS - Distributed Pub-Sub System
+# DAPSS – Distributed Pub-Sub System
 
-A fault-tolerant distributed publish-subscribe messaging system implementing Raft-inspired consensus, gossip-based message propagation, and comprehensive security features.
+A fault-tolerant distributed publish–subscribe messaging system implementing:
+
+- Adaptive gossip-based message propagation
+- Raft-inspired consensus replication
+- Lamport logical clocks
+- Persistent message logs
+- Node authentication, message signing, and encryption
+
+The system supports topic-based messaging, multi-hop dissemination, dynamic subscriptions, automatic peer discovery, and secure communication.
 
 ---
 
@@ -293,6 +301,9 @@ Our system achieves the following performance characteristics:
 - **Gossip protocol** (`overlay/gossip.py`) - Epidemic message propagation with adaptive metrics and persistence
 - **Gossip metrics system** (`utils/metrics.py`, `utils/plot_metrics.py`) - Performance tracking and visualization
 - **Latency benchmarks** (`latency_test.py`, `analyze_latency.py`) - Message latency measurement and analysis
+- **Security Testing** (`utils/tamper_send.py`) - Performed adversarial tests to validate integrity, HMAC verification, and encrypted message rejection
+- **Automated Test Suite**(`utils/automated_test.py`) -
+  Authored and integrated all automated test cases (TC-01 to TC-08) covering Lamport clocks, consensus replication, gossip propagation, deduplication, persistence, partition handling, and security
 
 ### Timothy Phan
 
@@ -304,37 +315,59 @@ Our system achieves the following performance characteristics:
 
 ---
 
-## Project Structure
-
 ```
 DAPSS/
 ├── main.py                          # Node entry point with CLI interface
 ├── cli_publish.py                   # External message publisher
 ├── config.json                      # Security configuration
 ├── requirements.txt                 # Python dependencies
+├── active_nodes.json               # Peer discovery registry (auto-generated)
 │
-├── overlay/                         # Network layer
+├── overlay/                         # Network & Communication Layer
 │   ├── node.py                      # TCP overlay network & message routing
 │   ├── gossip.py                    # Gossip protocol with adaptive metrics
-│   └── discovery.py                 # UDP peer discovery & registry
+│   ├── discovery.py                 # UDP peer discovery & registry
+│   │
+│   └── feature/                     # Core distributed systems features
+│       ├── agreement.py             # Raft consensus + partition handling
+│       ├── security.py              # Authentication, signing, encryption
+│       ├── timestamp.py             # Lamport logical clock
+│       └── message.py               # Message data structure
 │
-├── feature/                         # Core distributed systems features
-│   ├── agreement.py                 # Raft consensus + partition handling
-│   ├── security.py                  # Authentication, signing, encryption
-│   ├── timestamp.py                 # Lamport logical clock
-│   └── message.py                   # Message data structure
+├── application/                     # Application Layer
+│   ├── subscriber/                  # Subscription management
+│   │   └── subscriber.py            # Dynamic subscription management
+│   │
+│   └── publisher/                   # Publisher components
+│       └── publisher.py             # Publisher logic
 │
-├── subscriber/                      # Application layer
-│   └── subscriber.py                # Dynamic subscription management
-│
-├── publisher/                       # Publisher components
-│   └── publisher.py                 # Publisher logic
-│
-├── utils/                           # Utilities
+├── utils/                           # Utilities & Tools
 │   ├── metrics.py                   # Performance metrics tracking
-│   └── plot_metrics.py              # Metrics visualization
+│   ├── plot_metrics.py              # Metrics visualization
+│   ├── automated_test.py            # Automated test suite (8 tests)
+│   └── tamper_send.py               # Security testing tool (8 attacks)
 │
-└── (Performance Tests)              # Benchmark scripts
+├── metrics/                         # Metrics Output (auto-generated)
+│   ├── adaptive_stats_<port>.json  # Adaptive gossip tuning stats
+│   ├── gossip_metrics_<port>.json  # Gossip protocol events
+│   ├── consensus_metrics_<port>.json # Consensus protocol events
+│   ├── network_health_<port>.json  # Network health events
+│   └── summary_<port>.json          # Aggregated metrics summary
+│
+├── plots/                           # Visualizations (auto-generated)
+│   ├── adaptive_gossip.png          # Fanout/interval adaptation charts
+│   ├── summary_dashboard.png        # Complete cluster overview
+│   ├── consensus_timeline.png       # Consensus events timeline
+│   └── network_health.png           # Partition detection/healing
+│
+├── log/                             # Logs & Persistence (auto-generated)
+│   ├── gossip_log_<port>.json       # Persistent gossip message log
+│   ├── security_<port>.log          # Security event log
+│   └── node_data_<port>/            # Per-node state directory
+│       ├── node_log.json            # Node state log
+│       └── shutdown_marker.txt      # Clean shutdown marker
+│
+└── tests/                           # Performance Tests & Benchmarks
     ├── latency_test.py              # Latency measurement
     ├── analyze_latency.py           # Latency analysis
     ├── throughput_test.py           # Throughput measurement
