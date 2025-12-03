@@ -65,7 +65,7 @@ class Node:
             encryption_key = self.config.get("encryption_key", None)
             if encryption_key == "put_generated_key_here_or_leave_empty_to_auto_generate":
                 encryption_key = None
-            self.secure_channel = SecureChannel(cluster_secret, encryption_key)
+            self.secure_channel = SecureChannel(cluster_secret, encryption_key, node_port=self.port)
         else:
             self.secure_channel = None
 

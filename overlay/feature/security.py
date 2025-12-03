@@ -11,7 +11,7 @@ import time
 from typing import Optional, Tuple
 from cryptography.fernet import Fernet
 import base64
-
+import os
 
 class ClusterAuth:
     """
@@ -243,13 +243,14 @@ class MessageEncryption:
     Install: pip install cryptography
     """
 
-    def __init__(self, encryption_key: Optional[str] = None):
+    def __init__(self, encryption_key: Optional[str] = None, node_port: int = None):
         """
         Initialize encryption.
 
         Args:
             encryption_key: Base64-encoded Fernet key, or None to generate new key
         """
+        self.node_port = node_port
         if encryption_key:
             self.key = encryption_key.encode('utf-8')
         else:
@@ -295,6 +296,8 @@ class MessageEncryption:
             return decrypted.decode('utf-8')
         except Exception as e:
             print(f"[CRYPTO] Decryption failed: {e}")
+            # self.log(f"CRYPTO FAIL: {e}")
+            # self.log("SECURITY: Failed to decrypt/verify message")
             return None
 
 
@@ -303,7 +306,7 @@ class SecureChannel:
     Combines authentication, signing, and encryption for secure node communication.
     """
 
-    def __init__(self, cluster_secret: str, encryption_key: Optional[str] = None):
+    def __init__(self, cluster_secret: str, encryption_key: Optional[str] = None, node_port: int = None):
         """
         Initialize secure channel.
 
@@ -311,9 +314,17 @@ class SecureChannel:
             cluster_secret: Shared secret for authentication
             encryption_key: Encryption key (optional, will generate if None)
         """
+        # self.node_port = node_port
         self.auth = ClusterAuth(cluster_secret)
         self.crypto = MessageEncryption(encryption_key)
 
+        if node_port is None:
+            node_port = -1
+
+        log_dir = os.path.join(os.getcwd(), "log")
+        os.makedirs(log_dir, exist_ok=True)
+
+        self.security_log_path = os.path.join(log_dir, f"security_{node_port}.log")
     def secure_message(self, message_json: str) -> str:
         """
         Apply full security: sign + encrypt.
@@ -324,6 +335,7 @@ class SecureChannel:
         Returns:
             Secured message
         """
+
         # Step 1: Sign the message
         signed = self.auth.wrap_message(message_json)
 
@@ -359,15 +371,29 @@ class SecureChannel:
             # Step 1: Decrypt
             signed = self.crypto.decrypt(encrypted)
             if not signed:
+                self.log("[SECURITY] decryption_failed")
                 return None
+
 
             # Step 2: Verify signature
             original = self.auth.unwrap_message(signed)
             if not original:
+                self.log("[SECURITY] signature_verification_failed")
                 return None
-
+            
+            # self.log("[SECURITY] ok")
             return original
 
         except Exception as e:
             print(f"[SECURE] Error processing message: {e}")
             return None
+        
+    def log(self, msg: str):
+        """Append to security_<port>.log if logging enabled."""
+        if not self.security_log_path:
+            return
+        try:
+            with open(self.security_log_path, "a") as f:
+                f.write(msg + "\n")
+        except Exception as e:
+            print(f"[SECURITY_LOG_ERROR] {e}")
