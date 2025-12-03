@@ -11,13 +11,11 @@ def start_node(node: Node):
     except Exception as e:
         print(f"[FATAL] Node crashed: {e}")
 
-
 def parse_topics(arg: str):
     """Helper to parse comma-separated topics."""
     if not arg:
         return []
     return [t.strip() for t in arg.split(",") if t.strip()]
-
 
 if __name__ == "__main__":
     # ----------------------------------------------------------------------
@@ -84,7 +82,7 @@ if __name__ == "__main__":
         print(f"[AUTO] Subscribed to topics (non-interactive): {', '.join(auto_topics)}")
 
     else:
-        # Interactive mode (old behavior)
+        # Interactive mode
         print("\n📡 Available topics: news, updates, alerts, changes, weather, sports")
         print("Enter topics to subscribe (comma-separated, e.g. news,updates):")
         topic_input = input("> ").strip()
