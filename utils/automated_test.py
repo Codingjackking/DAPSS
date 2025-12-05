@@ -445,11 +445,11 @@ def test_tamper_detection(port):
     print("\n=== TC-08: Security - Tamper Detection ===")
     print("Objective: Verify system detects tampered messages")
 
-    # Check if tamper_send.py exists
-    tamper_script = os.path.join(PROJECT_ROOT, "utils", "tamper_send.py")
+    # Check if security_test.py exists
+    tamper_script = os.path.join(PROJECT_ROOT, "utils", "security_test.py")
     
     if not os.path.exists(tamper_script):
-        print(f"[WARN] tamper_send.py not found at {tamper_script}")
+        print(f"[WARN] security_test.py not found at {tamper_script}")
         # Create a simple tamper message directly
         fake_secure_msg = {
             "type": "SECURE",
@@ -476,8 +476,8 @@ def test_tamper_detection(port):
             print("[PASS] Connection rejected tampered message")
             return True
     else:
-        # Use the tamper_send.py script
-        print(f"[TEST] Using tamper_send.py to send forged message")
+        # Use the security_test.py script
+        print(f"[TEST] Using security_test.py to send forged message")
         try:
             result = subprocess.run(
                 ["python", tamper_script, str(port)],
@@ -487,7 +487,7 @@ def test_tamper_detection(port):
                 timeout=5
             )
             
-            # print(f"[DEBUG] tamper_send output: {result.stdout}")
+            # print(f"[DEBUG] security_test output: {result.stdout}")
             
             time.sleep(2)
             
@@ -506,7 +506,7 @@ def test_tamper_detection(port):
             print("[PASS] Tamper attempt timed out (connection rejected)")
             return True
         except Exception as e:
-            print(f"[ERROR] Failed to run tamper_send.py: {e}")
+            print(f"[ERROR] Failed to run security_test.py: {e}")
             print("[PASS] Test passed (script execution failed, likely rejected)")
             return True
 

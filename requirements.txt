@@ -1,1 +1,20 @@
+# DAPSS - Distributed Adaptive Publish-Subscribe System
+# Requirements for Python 3.10+
+
+# Core Cryptography (Security Layer)
 cryptography>=41.0.0
+
+# Data Visualization (Metrics & Performance Analysis)
+matplotlib>=3.7.0
+
+# Python Standard Library modules are included by default:
+# - socket (networking)
+# - threading (concurrency)
+# - json (serialization)
+# - struct (binary data)
+# - os, sys (system operations)
+# - time, datetime (timing)
+# - argparse (CLI)
+# - glob (file operations)
+# - statistics (math operations)
+# - typing (type hints)

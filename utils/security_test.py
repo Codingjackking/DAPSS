@@ -1,5 +1,5 @@
 """
-tamper_send.py - Security Testing Utility
+security_test.py - Security Testing Utility
 Sends various types of tampered messages to test the security layer
 """
 
@@ -70,7 +70,7 @@ TAMPER_TYPES = {
         "payload": {
             "topic": "'; DROP TABLE messages; --",
             "content": "__import__('os').system('whoami')",
-            "sender": "{{ 7*7 }}",  # Template injection
+            "sender": "{{ 7*7 }}", 
             "timestamp": datetime.now().isoformat(),
             "lamport_timestamp": 0,
             "exec": "eval(compile('print(1)', '<string>', 'exec'))"
@@ -212,11 +212,11 @@ def send_all_attacks(port):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python tamper_send.py <port> [tamper_type]")
+        print("Usage: python security_test.py <port> [tamper_type]")
         print("\nExamples:")
-        print("  python tamper_send.py 7001                # Default: secure")
-        print("  python tamper_send.py 7001 injection      # Specific attack")
-        print("  python tamper_send.py 7001 all            # All attacks")
+        print("  python security_test.py 7001                # Default: secure")
+        print("  python security_test.py 7001 injection      # Specific attack")
+        print("  python security_test.py 7001 all            # All attacks")
         print("\nAvailable tamper types:")
         for key, value in TAMPER_TYPES.items():
             print(f"  {key:15} - {value['name']}")

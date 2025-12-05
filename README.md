@@ -301,7 +301,7 @@ Our system achieves the following performance characteristics:
 - **Gossip protocol** (`overlay/gossip.py`) - Epidemic message propagation with adaptive metrics and persistence
 - **Gossip metrics system** (`utils/metrics.py`, `utils/plot_metrics.py`) - Performance tracking and visualization
 - **Latency benchmarks** (`latency_test.py`, `analyze_latency.py`) - Message latency measurement and analysis
-- **Security Testing** (`utils/tamper_send.py`) - Performed adversarial tests to validate integrity, HMAC verification, and encrypted message rejection
+- **Security Testing** (`utils/security_test.py`) - Performed adversarial tests to validate integrity, HMAC verification, and encrypted message rejection
 - **Automated Test Suite**(`utils/automated_test.py`) -
   Authored and integrated all automated test cases (TC-01 to TC-08) covering Lamport clocks, consensus replication, gossip propagation, deduplication, persistence, partition handling, and security
 
@@ -345,7 +345,7 @@ DAPSS/
 │   ├── metrics.py                   # Performance metrics tracking
 │   ├── plot_metrics.py              # Metrics visualization
 │   ├── automated_test.py            # Automated test suite (8 tests)
-│   └── tamper_send.py               # Security testing tool (8 attacks)
+│   └── security_test.py               # Security testing tool (8 attacks)
 │
 ├── metrics/                         # Metrics Output (auto-generated)
 │   ├── adaptive_stats_<port>.json  # Adaptive gossip tuning stats
@@ -403,4 +403,6 @@ taskkill /PID <pid> /F
 lsof -ti:5001 | xargs kill -9
 ```
 
----
+### Notes
+
+security_test.py was created to test the security layer. It may trigger antivirus warnings as it simulates attack vectors.
